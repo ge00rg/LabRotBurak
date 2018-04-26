@@ -31,6 +31,28 @@ def c(t, x, m, t_on, t_off):
         return m - x
     else:
         return 0
+# possibly add noise
+
+
+def make_Gkernel(J, N, scale, structure='uniform'):
+    """
+    :param scale: avegrage magnitude of weights
+    :param structure: 'uniform' or 'polarized' or 'polarized-ordered'
+    :return: matrix of output weights
+    """
+    if structure == 'uniform':
+        return np.ones((J, N)) * scale
+    if structure == 'polarized':
+        Gkernel = np.ones((J, N)) * scale
+        cols_to_invert = np.random.choice(N, size=int(N/2), replace=False)
+        Gkernel[:, cols_to_invert] *= -1
+        return Gkernel
+    if structure == 'polarized-ordered':
+        Gkernel = np.ones((J, N)) * scale
+        Gkernel[:, int(N/2):] *= -1
+        return Gkernel
+    else:
+        raise ValueError('invalid structure parameter')
 
 
 def make_A(J, mode='zero'):
@@ -44,6 +66,55 @@ def make_A(J, mode='zero'):
         return np.zeros((J, J))
     else:
         raise ValueError('incorrect mode')
+
+
+def h_d(tau, lamb_d=10):
+    """
+    :param tau: time
+    :param lamb_d: decay parameter
+    :return: impact of spike after t
+    """
+    return np.exp(-lamb_d * tau)
+
+
+def make_Omega_f(mu, G, lamb_d=10):
+    """
+    :param mu: quadratic penalty from error expression
+    :param G: output weight Kernel
+    :param lamb_d: decay parameter
+    :return: fast connection matrix
+    """
+    return G.T@G + mu * lamb_d**2 * np.identity(N)
+
+
+def make_Omega_s(G, A, lamb_d=10):
+    """
+    :param G: output weight Kernel
+    :param A: dynamics matrix
+    :param lamb_d: decay parameter
+    :return: slow connection matrix
+    """
+    return G.T@(A + lamb_d * np.identity(J))@G
+
+G = make_Gkernel(J, N, 0.1, structure='polarized-ordered')
+A = make_A(J)
+mu = 1e-6
+omega_s = make_Omega_s(G, A)
+omega_f = make_Omega_f(mu, G)
+f, axes = plt.subplots(2, 2)
+Aim = axes[0, 0].imshow(A)
+Gim = axes[0, 1].imshow(G)
+omfim = axes[1, 0].imshow(omega_f)
+omsim = axes[1, 1].imshow(omega_s)
+f.colorbar(Aim, ax=axes[0,0])
+f.colorbar(Gim, ax=axes[0,1])
+f.colorbar(omfim, ax=axes[1,0])
+f.colorbar(omsim, ax=axes[1,1])
+axes[0,0].set_title('A')
+axes[0,1].set_title('G')
+axes[1,0].set_title('$\Omega_f$')
+axes[1,1].set_title('$\Omega_s$')
+plt.show()
 
 # create system objects and dependent variables
 N_t = (t_end - t_0)/dt
