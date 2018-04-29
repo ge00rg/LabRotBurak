@@ -4,11 +4,17 @@ from scipy.stats import norm
 import matplotlib.pyplot as plt
 
 # define parameters
-J = 10              # dimension of x
-N = 20              # number of neurons
-t_0 = 0             # time at start of integration
-t_end = 100         # time at end of integration
-dt = 0.1            # integration time-step
+J = 10                                  # dimension of x
+N = 20                                  # number of neurons
+t_0 = 0                                 # time at start of integration
+t_end = 100                             # time at end of integration
+dt = 0.1                                # integration time-step
+lamb_d = 10                             # readout decay rate
+lamb_V = 20                             # voltage leak constant
+g_scale = 0.1                           # scale of values in decoding kernel
+g_structure = 'polarized-ordered'       # structure of decoding kernel
+mu = 1e-6                               # weight of quadratic penalty on rates
+nu = 1e-5                               # weight of linear penalty on rates
 
 x_init = 'zero'     # value to which x is initialized. 'zero' initializes at zero, 'normal' - random normal
 
@@ -96,28 +102,46 @@ def make_Omega_s(G, A, lamb_d=10):
     """
     return G.T@(A + lamb_d * np.identity(J))@G
 
-G = make_Gkernel(J, N, 0.1, structure='polarized-ordered')
-A = make_A(J)
-mu = 1e-6
-omega_s = make_Omega_s(G, A)
-omega_f = make_Omega_f(mu, G)
-f, axes = plt.subplots(2, 2)
-Aim = axes[0, 0].imshow(A)
-Gim = axes[0, 1].imshow(G)
-omfim = axes[1, 0].imshow(omega_f)
-omsim = axes[1, 1].imshow(omega_s)
-f.colorbar(Aim, ax=axes[0,0])
-f.colorbar(Gim, ax=axes[0,1])
-f.colorbar(omfim, ax=axes[1,0])
-f.colorbar(omsim, ax=axes[1,1])
-axes[0,0].set_title('A')
-axes[0,1].set_title('G')
-axes[1,0].set_title('$\Omega_f$')
-axes[1,1].set_title('$\Omega_s$')
-plt.show()
+def test_matrices(J, N, scale, structure, mu):
+    G = make_Gkernel(J, N, scale, structure=structure)
+    A = make_A(J)
+    omega_s = make_Omega_s(G, A)
+    omega_f = make_Omega_f(mu, G)
+    f, axes = plt.subplots(2, 2)
+    Aim = axes[0, 0].imshow(A)
+    Gim = axes[0, 1].imshow(G)
+    omfim = axes[1, 0].imshow(omega_f)
+    omsim = axes[1, 1].imshow(omega_s)
+    f.colorbar(Aim, ax=axes[0,0])
+    f.colorbar(Gim, ax=axes[0,1])
+    f.colorbar(omfim, ax=axes[1,0])
+    f.colorbar(omsim, ax=axes[1,1])
+    axes[0, 0].set_title('A')
+    axes[0, 1].set_title('G')
+    axes[1, 0].set_title('$\Omega_f$')
+    axes[1, 1].set_title('$\Omega_s$')
+    plt.tight_layout()
+    plt.show()
+
+
+def set_spikes(spikes, t_0, t_end, n_spikes):
+    for i in range(N):
+        spike_times = np.random.choice(np.arange(t_0, t_end), size=n_spikes, replace=False)
+        spikes[spike_times, i] = 1
+
+
+def plot_spike_trains(spikes):
+    f, axes = plt.subplots(N)
+    for i in range(N):
+        axes[i].plot(spikes[:, i])
+        axes[i].set_axis_off()
+    plt.show()
+
+test_matrices(J, N, g_scale, g_structure, mu)
 
 # create system objects and dependent variables
 N_t = (t_end - t_0)/dt
+hd_0 = h_d(0, lamb_d=lamb_d)        # should always be one
 if not N_t.is_integer():
     raise ValueError('(t_end - t_0)/dt has to be a whole number')
 else:
@@ -127,8 +151,20 @@ times = np.linspace(t_0, t_end - dt, N_t)
 
 assert(times[1] - times[0] == dt)
 
-A = make_A(J)               # state transition matrix
-x = np.zeros((N_t, J))      # will contain x across time and dimension
+A = make_A(J)                                           # state transition matrix
+G = make_Gkernel(J, N, g_scale, structure=g_structure)  # decoder kernel
+omega_s = make_Omega_s(G, A)                            # slow connection matrix
+omega_f = make_Omega_f(mu, G)                           # fast connection matrix
+x = np.zeros((N_t, J))                                  # will contain x across time and dimension
+V = np.zeros((N_t, N))                                  # will contain voltages across times and N
+spikes = np.zeros((N_t, N))                             # will contain spikes, encoded as ones
+# let V start at 0 for now
+
+# testing
+set_spikes(spikes, int(N_t/3), int(2*N_t/3), 10)
+plot_spike_trains(spikes)
+
+
 if x_init == 'normal':
     x[0] = np.random.normal(size=J)
 
@@ -136,6 +172,7 @@ if x_init == 'normal':
 for i, t in enumerate(times[:-1]):
     # update x
     x[i + 1] = x[i] + (A@x[i] + c(t, x[i], m, t_on, t_off)) * dt
+    #V[i + 1] = V[i] -
     # later feedback xhat
 
 
