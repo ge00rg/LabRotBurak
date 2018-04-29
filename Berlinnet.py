@@ -8,7 +8,7 @@ J = 10                                  # dimension of x
 N = 20                                  # number of neurons
 t_0 = 0                                 # time at start of integration
 t_end = 100                             # time at end of integration
-dt = 0.01                                # integration time-step
+dt = 0.01                               # integration time-step
 lamb_d = 10                             # readout decay rate
 lamb_V = 20                             # voltage leak constant
 g_scale = 0.1                           # scale of values in decoding kernel
@@ -213,7 +213,7 @@ for i, t in enumerate(times[:-1]):
 # testing
 #test_matrices(J, N, g_scale, g_structure, mu)
 #plot_x(x, t_on, t_off)
-plot_spike_trains(spikes)
-plot_slow_currents(slow_current)
+#plot_spike_trains(spikes)
+#plot_slow_currents(slow_current)
 plt.plot(V[:, 0])
 plt.show()
