@@ -8,13 +8,14 @@ J = 10                                  # dimension of x
 N = 20                                  # number of neurons
 t_0 = 0                                 # time at start of integration
 t_end = 100                             # time at end of integration
-dt = 0.1                                # integration time-step
+dt = 0.01                                # integration time-step
 lamb_d = 10                             # readout decay rate
 lamb_V = 20                             # voltage leak constant
 g_scale = 0.1                           # scale of values in decoding kernel
 g_structure = 'polarized-ordered'       # structure of decoding kernel
 mu = 1e-6                               # weight of quadratic penalty on rates
 nu = 1e-5                               # weight of linear penalty on rates
+sigma_V = 1e-3                          # standard deviation of noise in voltage
 
 x_init = 'zero'     # value to which x is initialized. 'zero' initializes at zero, 'normal' - random normal
 
@@ -36,7 +37,7 @@ def c(t, x, m, t_on, t_off):
     if t_on <= t < t_off:
         return m - x
     else:
-        return 0
+        return np.zeros(x.shape[0])
 # possibly add noise
 
 
@@ -102,6 +103,14 @@ def make_Omega_s(G, A, lamb_d=10):
     """
     return G.T@(A + lamb_d * np.identity(J))@G
 
+
+def make_T(G):
+    """
+    :param G: decoder kernel
+    :return: thresholds T
+    """
+    return (np.sum(G**2, axis=0) + nu*lamb_d + mu*lamb_d**2)/2
+
 def test_matrices(J, N, scale, structure, mu):
     G = make_Gkernel(J, N, scale, structure=structure)
     A = make_A(J)
@@ -137,7 +146,22 @@ def plot_spike_trains(spikes):
         axes[i].set_axis_off()
     plt.show()
 
-test_matrices(J, N, g_scale, g_structure, mu)
+
+def plot_x(x, t_on, t_off):
+    for i in range(J):
+        plt.plot(times, x[:, i])
+        plt.axvline(t_on, linestyle='--', color='k', alpha=0.5)
+        plt.axvline(t_off, linestyle='--', color='k', alpha=0.5)
+    plt.show()
+
+
+def plot_slow_currents(slow_current):
+    f, axes = plt.subplots(N, 1, sharex=True, sharey=True)
+    for i in range(N):
+        axes[i].plot(slow_current[:, i])
+        axes[i].set_axis_off()
+    plt.show()
+
 
 # create system objects and dependent variables
 N_t = (t_end - t_0)/dt
@@ -153,16 +177,18 @@ assert(times[1] - times[0] == dt)
 
 A = make_A(J)                                           # state transition matrix
 G = make_Gkernel(J, N, g_scale, structure=g_structure)  # decoder kernel
+T = make_T(G)                                           # thresholds
 omega_s = make_Omega_s(G, A)                            # slow connection matrix
 omega_f = make_Omega_f(mu, G)                           # fast connection matrix
 x = np.zeros((N_t, J))                                  # will contain x across time and dimension
 V = np.zeros((N_t, N))                                  # will contain voltages across times and N
 spikes = np.zeros((N_t, N))                             # will contain spikes, encoded as ones
+slow_current = np.zeros((N_t, N))                       # will contain slow currents. Possibly only save current state
 # let V start at 0 for now
 
 # testing
-set_spikes(spikes, int(N_t/3), int(2*N_t/3), 10)
-plot_spike_trains(spikes)
+#set_spikes(spikes, int(N_t/3), int(2*N_t/3), 10)
+#plot_spike_trains(spikes)
 
 
 if x_init == 'normal':
@@ -172,13 +198,22 @@ if x_init == 'normal':
 for i, t in enumerate(times[:-1]):
     # update x
     x[i + 1] = x[i] + (A@x[i] + c(t, x[i], m, t_on, t_off)) * dt
-    #V[i + 1] = V[i] -
-    # later feedback xhat
+    slow_current[i + 1] = slow_current[i] - lamb_d*slow_current[i]*dt + spikes[i]*hd_0
 
+    spikes[i] = (V[i] >= T).astype(int)
+
+    V[i + 1] = V[i] + omega_s@slow_current[i]*dt - omega_f@spikes[i] + \
+        (-lamb_d*V[i] + G.T@c(t, x[i], m, t_on, t_off) + np.random.normal(0, sigma_V, size=N))*dt
+
+    # does the dt belong with the slow current? Probably yes, because otherwise it would not trail behind fast.
+    # check if voltage does what is necessary. If not, see question marks
+    # later feedback xhat
+    # possibly tweak lamb_d
 
 # testing
-for i in range(J):
-    plt.plot(times, x[:, i])
-    plt.axvline(t_on, linestyle='--', color='k', alpha=0.5)
-    plt.axvline(t_off, linestyle='--', color='k', alpha=0.5)
+#test_matrices(J, N, g_scale, g_structure, mu)
+#plot_x(x, t_on, t_off)
+plot_spike_trains(spikes)
+plot_slow_currents(slow_current)
+plt.plot(V[:, 0])
 plt.show()
