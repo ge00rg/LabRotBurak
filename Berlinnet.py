@@ -187,8 +187,8 @@ slow_current = np.zeros((N_t, N))                       # will contain slow curr
 # let V start at 0 for now
 
 # testing
-#set_spikes(spikes, int(N_t/3), int(2*N_t/3), 10)
-#plot_spike_trains(spikes)
+# set_spikes(spikes, int(N_t/3), int(2*N_t/3), 10)
+# plot_spike_trains(spikes)
 
 
 if x_init == 'normal':
@@ -211,9 +211,9 @@ for i, t in enumerate(times[:-1]):
     # possibly tweak lamb_d
 
 # testing
-#test_matrices(J, N, g_scale, g_structure, mu)
-#plot_x(x, t_on, t_off)
-#plot_spike_trains(spikes)
-#plot_slow_currents(slow_current)
+# test_matrices(J, N, g_scale, g_structure, mu)
+# plot_x(x, t_on, t_off)
+# plot_spike_trains(spikes)
+# plot_slow_currents(slow_current)
 plt.plot(V[:, 0])
 plt.show()
