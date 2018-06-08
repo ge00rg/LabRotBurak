@@ -1,25 +1,28 @@
 import numpy as np
 from scipy.stats import norm
 from fsave import fsave
+import h5py
 
 import matplotlib.pyplot as plt
 
 # define parameters
 J = 1                                   # dimension of x
-N = 10                                 # number of neurons
+N = 400                                 # number of neurons
+unit_scale = 1
 t_0 = 0                                 # time at start of integration
-t_end = 2                             # time at end of integration [s]
+t_end = 20                               # time at end of integration [s]
 dt = 0.0001                             # integration time-step [s]
 lamb_d = 10                             # readout decay rate
 lamb_V = 20                             # voltage leak constant
-g_scale = 0.1                           # scale of values in decoding kernel
+g_scale = 0.158*np.sqrt(unit_scale)                           # scale of values in decoding kernel
 g_structure = 'polarized-ordered'       # structure of decoding kernel
-mu = 1e-6                               # weight of quadratic penalty on rates
-nu = 1e-5                               # weight of linear penalty on rates
-sigma_V = 1/6*1e-3                          # standard deviation of noise in voltage
+mu = 1e-6*unit_scale                               # weight of quadratic penalty on rates
+nu = 1e-5*unit_scale                               # weight of linear penalty on rates
+sigma_V = 1e-1*unit_scale                          # standard deviation of noise in voltage
 sigma_s = 0.01                          # standard deviation of noise in stimulus
 lamb_s = 0
-ampli = 50
+ampli = 100*np.sqrt(unit_scale)
+print(ampli)
 cap = False
 
 x_init = 'zero'     # value to which x is initialized. 'zero' initializes at zero, 'normal' - random normal
@@ -52,16 +55,18 @@ def c(t, noise=True, amplitude=50, sigmamult=1):
     else:
         rnd = 0
     # print(rnd)
-    if 0.0 < t < 0.5:
+    if 0.0 <= t <0.2:
+        return np.zeros(J) + rnd * sigmamult
+    elif 0.2 < t < 0.5:
         return np.ones(J)*amplitude + rnd*sigmamult
-    elif 0.5 <= t < 0.6:
+    elif 0.5 <= t < 0.7:
         return np.zeros(J) + rnd*sigmamult
-    elif 0.6 <= t < 1.1:
-        return np.ones(J)*(-1)*amplitude + rnd*sigmamult
-    elif 1.1 <= t < 1.3:
+    elif 0.7 <= t < 1.0:
+        return np.ones(J)*(-2)*amplitude + rnd*sigmamult
+    elif 1.0 <= t < 1.2:
         return np.zeros(J) + rnd * sigmamult
     else:
-        return np.zeros(J)*amplitude
+        return np.zeros(J)
 
 # def c(t):
 #     if t < 0.5:
@@ -196,7 +201,7 @@ def plot_slow_currents(slow_current):
     plt.show()
 
 
-def plot_network(x_hat, x, times, spikes, r, N, c_scale=0.1, save=False):
+def plot_network(x_hat, x, times, spikes, r, N, c_scale=0.1, n_neurons=4, save=False):
     f, axes = plt.subplots(3, 2, sharex='col', sharey='row')
     axes[0 ,0].plot(times, x_hat, label='$\hat{x}$', linewidth=5)
     axes[0, 0].plot(times, x, label='$x$')
@@ -205,21 +210,24 @@ def plot_network(x_hat, x, times, spikes, r, N, c_scale=0.1, save=False):
     axes[0, 1].plot(times, x, label='$x$')
     # axes[0, 1].plot(times, c_scale * np.vectorize(c)(times), label='${}c(t)$'.format(c_scale))
     axes[0, 1].legend()
-    for i in range(int(N/2)):
+
+    num_pos = np.random.choice(int(N/2), size=n_neurons, replace=False)
+    num_neg = np.random.choice(int(N/2), size=n_neurons, replace=False) + int(N/2)
+    for k, i in enumerate(num_pos):
         spike_times = times[spikes[:, i].astype(bool)]
-        axes[1, 0].scatter(spike_times, np.ones(spike_times.shape[0])*0.1*i, s=1, c='r')
-        axes[1, 1].scatter(spike_times, np.ones(spike_times.shape[0])*0.1*i, s=1, c='r')
-    for i in range(int(N/2), N):
+        axes[1, 0].scatter(spike_times, np.ones(spike_times.shape[0])*0.2*k, s=1, c='r')
+        axes[1, 1].scatter(spike_times, np.ones(spike_times.shape[0])*0.2*k, s=1, c='r')
+    for k, i in enumerate(num_neg):
         spike_times = times[spikes[:, i].astype(bool)]
-        axes[1, 0].scatter(spike_times, np.ones(spike_times.shape[0])*0.1*i, s=1, c='b')
-        axes[1, 1].scatter(spike_times, np.ones(spike_times.shape[0])*0.1*i, s=1, c='b')
+        axes[1, 0].scatter(spike_times, np.ones(spike_times.shape[0])*0.2*k+n_neurons*0.2, s=1, c='b')
+        axes[1, 1].scatter(spike_times, np.ones(spike_times.shape[0])*0.2*k+n_neurons*0.2, s=1, c='b')
     axes[2, 0].plot(times, np.mean(r[:, :int(N/2)], axis=1), color='r')
     axes[2, 0].plot(times, np.mean(r[:, int(N/2):], axis=1), color='b')
     axes[2, 1].plot(times, np.mean(r[:, :int(N / 2)], axis=1), color='r')
     axes[2, 1].plot(times, np.mean(r[:, int(N / 2):], axis=1), color='b')
 
     for i in range(3):
-        axes[i, 0].set_xlim(0, 2)
+        axes[i, 0].set_xlim(0, t_end)
         axes[i, 1].set_xlim(t_end-2, t_end)
     if save:
         name = 'N={}_t-end={}_dt={}_lambD={}_lambV={}_mu={}_nu={}_sigV={}_sigS={}_lambS={}_mu={}_nu={}'.format(
@@ -265,7 +273,7 @@ spikes = np.zeros((N_t, N))                             # will contain spikes, e
 slow_current = np.zeros((N_t, N))                       # will contain slow currents. Possibly only save current state
 current_spikes = np.zeros((N, N))                       # spikes during one cycle from neuron i to neuron i
 # let V start at 0 for now
-
+print(omega_f[:,0])
 
 # test_matrices(J, N, g_scale, g_structure, mu)
 
@@ -273,49 +281,84 @@ current_spikes = np.zeros((N, N))                       # spikes during one cycl
 # set_spikes(spikes, int(N_t/3), int(2*N_t/3), 1)
 # plot_spike_trains(spikes)
 
+# snapshot = np.zeros(N)
 
 if x_init == 'normal':
     x[0] = np.random.normal(size=J)
 
+
+np.random.seed(0)
+#c_ints = np.zeros(N_t)
+#c_noises = np.zeros(N_t)
+#neural_noises = np.zeros((N_t, N))
+#for i, t in enumerate(times):
+#    c_ints[i] = c(t, amplitude=ampli, noise=False)
+#    if t < 1.2:
+#        c_noises[i] = np.random.normal(0, sigma_s, size=J)*ampli
+#    else:
+#        c_noises[i] = np.zeros(J)
+#    neural_noises[i] = np.random.normal(0, sigma_V, size=N)
 # euler-integrator
+order = np.arange(N)
+state = np.zeros(N)
 for i, t in enumerate(times[:-1]):
     if i%100 == 0:
         print('{}/{} timesteps complete'.format(i, N_t))
     # debugger
 
+    t_nonoise = 0.004
     c_int = c(t, amplitude=ampli, noise=False)
-    if t > 1.5:
+    if t >= t_nonoise:
         c_noise = np.zeros(J)
     else:
         c_noise = np.random.normal(0, sigma_s, size=J)*ampli*2
+    #c_int = np.array([c_ints[i]])
+    #c_noise = np.array([c_noises[i]])
+    # c_noise = np.array([0])
+    # c_int = np.array([0])
 
     # update x
     # x[i + 1] = x[i] + (A@x[i] + c(t)) * dt
     x[i + 1] = x[i] + (A @ x[i] + c_int) * dt + c_noise * np.sqrt(dt)
     slow_current[i + 1] = slow_current[i] - lamb_d*slow_current[i]*dt + spikes[i]*hd_0
 
-    order = np.random.permutation(N)
+    # order = np.random.permutation(N)
+    state[:] = V[i]
+    count = 0
     for k in order:
         neural_noise = np.random.normal(0, sigma_V)
+        #neural_noise = neural_noises[i, k]
+        # neural_noise = 0
 
-        fast_current = omega_f[:, k] @ current_spikes[:, k]
-        # fast_current = 0
+        # fast_current = omega_f[:, k] @ current_spikes[:, k]
+        fast_current = np.zeros(J)
+        leakval = V[i, k]
+        # leakval = snapshot[k]
 
-        V[i + 1, k] = V[i, k] + omega_s[:, k] @ slow_current[i + 1] * dt - fast_current + \
-            -lamb_d * V[i, k] * dt + G[:, k].T @ c_int * dt + G[:, k].T @ c_noise * np.sqrt(dt) + \
+        # V[i + 1, k] = leakval + omega_s[:, k] @ slow_current[i + 1] * dt - fast_current + \
+        #     -lamb_d * leakval * dt + G[:, k].T @ c_int * dt + G[:, k].T @ c_noise * np.sqrt(dt) + \
+        #     neural_noise * np.sqrt(dt)
+        state[k] += omega_s[k, :] @ slow_current[i + 1] * dt - fast_current + \
+            -lamb_V * leakval * dt + G[:, k].T @ c_int * dt + G[:, k].T @ c_noise * np.sqrt(dt) + \
             neural_noise * np.sqrt(dt)
+        # snapshot[k] = V[i + 1, k]
 
         current_spikes[:, k] = 0
-        spikeval = int(V[i + 1, k] >= T[k])
+        # spikeval = int(V[i + 1, k] >= T[k])
+        spikeval = int(state[k] >= T[k])
+        # new test
+        # if t == 0 and k == 0:
+        #     spikeval = 1
         spikes[i + 1, k] = spikeval
         if spikeval == 1:
+            count += 1
             if cap:
                 V[i + 1, k] = T[k]
             current_spikes[k, :] = spikeval
-            # V[i + 1, :] -= omega_f[k, :]
-            # spikeval = 0
+            state[:] -= omega_f[k, :]
+            spikeval = 0
         # slow_current[i + 1, k] = slow_current[i, k] - lamb_d * slow_current[i, k] * dt + spikes[i, k] * hd_0
-
+    V[i + 1] = state
         # does the dt belong with the slow current? Probably yes, because otherwise it would not trail behind fast.
 
 # decoder
@@ -325,13 +368,22 @@ for i in range(N_t - 1):
     r[i + 1] = r[i] - lamb_d*r[i]*dt + lamb_d*spikes[i]
 x_hat = 1/lamb_d * np.sum(G*r, axis=1)
 
+fle = h5py.File('first_save.hdf5', 'w')
+fle['x'] = x
+fle['x_hat'] = x_hat
+fle['r'] = r
+fle['spikes'] = spikes
+fle['V'] = V
+fle.close()
+
+
 
 test_matrices(J, N, g_scale, g_structure, mu)
 
-f, axes = plt.subplots(3, 2, sharex='col')
-a = np.random.choice(int(N/2), size=3, replace=False)
-b = np.random.choice(int(N/2), size=3, replace=False) + int(N/2)
-for i in range(3):
+f, axes = plt.subplots(4, 2, sharex='col')
+a = np.random.choice(int(N/2), size=4, replace=False)
+b = np.random.choice(int(N/2), size=4, replace=False) + int(N/2)
+for i in range(4):
     axes[i, 0].plot(V[:, a[i]])
     axes[i, 1].plot(V[:, b[i]])
     axes[i, 0].axhline(T[0], linestyle='--', color='r')
@@ -343,4 +395,4 @@ plt.plot(times, x_hat, label='$\hat{x}$')
 plt.legend()
 plt.show()
 
-plot_network(x_hat, x, times, spikes, r, N, save=True)
+plot_network(x_hat, x, times, spikes, r, N, n_neurons=int(3/8*N), save=True)
